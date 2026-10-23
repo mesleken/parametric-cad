@@ -3,7 +3,7 @@
 import ast
 from pathlib import Path
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import platformdirs
 
 class ExtractedParam(tuple):
@@ -60,7 +60,11 @@ def extract_parameters_from_ast(code_str: str) -> List[ExtractedParam]:
                     val = def_expr.value if isinstance(def_expr, ast.Constant) else 0.0
                 else:
                     val = 10.0
-                val_type = "float" if isinstance(val, float) else ("int" if isinstance(val, int) else "str")
+                # Infer type annotation if present
+                if arg_node.annotation and isinstance(arg_node.annotation, ast.Name):
+                    val_type = arg_node.annotation.id
+                else:
+                    val_type = "float" if isinstance(val, float) else ("int" if isinstance(val, int) else ("bool" if isinstance(val, bool) else "str"))
                 params.append(ExtractedParam(arg_name, val, val_type, node.name))
             if params:
                 return params
@@ -73,7 +77,7 @@ def extract_parameters_from_ast(code_str: str) -> List[ExtractedParam]:
                     var_name = target.id
                     if isinstance(node.value, ast.Constant):
                         val = node.value.value
-                        val_type = "float" if isinstance(val, float) else ("int" if isinstance(val, int) else "str")
+                        val_type = "float" if isinstance(val, float) else ("int" if isinstance(val, int) else ("bool" if isinstance(val, bool) else "str"))
                         params.append(ExtractedParam(var_name, val, val_type, "custom_part"))
     return params
 
@@ -82,53 +86,58 @@ def promote_script_to_template(
     template_id: str,
     template_name: str,
     category: str = "User Custom",
-    description: str = "Custom template automatically promoted from Python script."
+    description: str = "Custom template automatically promoted from Python script.",
+    param_overrides: Optional[List[Dict[str, Any]]] = None
 ) -> Path:
     """Converts a user script into a valid pcad template file and registers it."""
-    params = extract_parameters_from_ast(code_str)
-    if not params:
-        raise ValueError("No parameter variables or function arguments found in script (e.g. width = 40.0).")
+    if param_overrides:
+        params_data = param_overrides
+    else:
+        raw_params = extract_parameters_from_ast(code_str)
+        if not raw_params:
+            raise ValueError("No parameter variables or function arguments found in script (e.g. width = 40.0).")
+        params_data = [
+            {"name": p["name"], "default": p["default"], "type": p["type"], "unit": "mm" if p["type"] == "float" else "-"}
+            for p in raw_params
+        ]
         
     slug = re.sub(r"[^a-zA-Z0-9_]", "_", template_id.lower())
     
-    # Generate Pydantic parameter class code
+    # Generate Pydantic parameter class code with Annotated, Field, and UI metadata
     fields_code = []
-    for p in params:
+    for p in params_data:
         name = p["name"]
         val = p["default"]
-        vtype = p["type"]
-        fields_code.append(f"    {name}: {vtype} = {val}")
+        vtype = p.get("type", "float")
+        unit = p.get("unit", "mm" if vtype == "float" else "-")
+        min_val = p.get("min", None)
+        max_val = p.get("max", None)
         
-    param_block = "\n".join(fields_code)
+        field_args = []
+        if min_val is not None and vtype in ("float", "int"):
+            field_args.append(f"ge={min_val}")
+        if max_val is not None and vtype in ("float", "int"):
+            field_args.append(f"le={max_val}")
+        field_clause = f"Field({', '.join(field_args)})" if field_args else "Field()"
+        
+        label_str = name.replace("_", " ").title()
+        ui_clause = f'UI(label="{label_str}", unit="{unit}")'
+        fields_code.append(f"    {name}: Annotated[{vtype}, {field_clause}, {ui_clause}] = {val}")
+        
+    param_class_src = "\n".join(fields_code)
     
-    # Body replacement: replace literal assignment with p.<name>
-    body_lines = []
-    param_names = {p["name"] for p in params}
-    for line in code_str.splitlines():
-        # Skip original assignments of the extracted parameters
-        stripped = line.strip()
-        matched = False
-        for p_name in param_names:
-            if stripped.startswith(f"{p_name} =") or stripped.startswith(f"{p_name}="):
-                matched = True
-                break
-        if not matched:
-            # Replace variable usages with params.<name>
-            modified_line = line
-            for p_name in param_names:
-                # regex word boundary replace
-                modified_line = re.sub(rf"\b{p_name}\b", f"params.{p_name}", modified_line)
-            body_lines.append("    " + modified_line)
-            
-    body_block = "\n".join(body_lines)
+    param_class_name = f"CustomParams_{slug}"
     
-    template_content = f'''"""User-generated template: {template_name}"""
-
-from pydantic import BaseModel
-from pcad.domain.template import template
-
-class CustomParams_{slug}(BaseModel):
-{param_block}
+    # Check if code has a function or is a sequential script
+    has_func = any(isinstance(node, ast.FunctionDef) for node in ast.parse(code_str).body)
+    
+    if has_func:
+        # Wrap the function call
+        fn_match = re.search(r"def\s+([a-zA-Z0-9_]+)\s*\(", code_str)
+        fn_name = fn_match.group(1) if fn_match else "build_part"
+        kwargs_pass = ", ".join([f"{p['name']}=params.{p['name']}" for p in params_data])
+        exec_body = f"""
+{code_str}
 
 @template(
     id="user.{slug}",
@@ -136,19 +145,55 @@ class CustomParams_{slug}(BaseModel):
     category="{category}",
     name="{template_name}",
     description="{description}",
-    params=CustomParams_{slug}
+    params={param_class_name},
+    default_material="Al7075-T6"
 )
-def build(params: CustomParams_{slug}):
-{body_block}
-    return result
+def build(params: {param_class_name}):
+    return {fn_name}({kwargs_pass})
+"""
+    else:
+        # Sequential script: replace parameter assignments with params.<param>
+        body_lines = []
+        for line in code_str.splitlines():
+            is_param_line = False
+            for p in params_data:
+                name = p["name"]
+                if re.match(rf"^\s*{name}\s*=", line):
+                    body_lines.append(f"    {name} = params.{name}")
+                    is_param_line = True
+                    break
+            if not is_param_line:
+                body_lines.append(f"    {line}")
+                
+        indented_body = "\n".join(body_lines)
+        exec_body = f"""
+@template(
+    id="user.{slug}",
+    version="1.0.0",
+    category="{category}",
+    name="{template_name}",
+    description="{description}",
+    params={param_class_name},
+    default_material="Al7075-T6"
+)
+def build(params: {param_class_name}):
+{indented_body}
+    return result if 'result' in locals() else (part if 'part' in locals() else None)
+"""
+
+    file_content = f'''"""User Created Parametric CAD Template: {template_name}"""
+from typing import Annotated, List
+from pydantic import BaseModel, Field
+import build123d as bd
+from pcad.domain.template import UI, template
+
+class {param_class_name}(BaseModel):
+{param_class_src}
+
+{exec_body}
 '''
-    
-    # Save to user templates directory
-    user_tpl_dir = Path(platformdirs.user_data_dir("pcad", "pcad")) / "templates"
+    user_tpl_dir = Path(platformdirs.user_data_dir("pcad", "Meslek")) / "templates"
     user_tpl_dir.mkdir(parents=True, exist_ok=True)
-    out_file = user_tpl_dir / f"user_{slug}.py"
-    
-    with open(out_file, "w", encoding="utf-8") as f:
-        f.write(template_content)
-        
+    out_file = user_tpl_dir / f"{slug}.py"
+    out_file.write_text(file_content, encoding="utf-8")
     return out_file

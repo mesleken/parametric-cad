@@ -1,9 +1,11 @@
 """Template specification, parameter metadata, and result contracts."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from pydantic import BaseModel, Field
+
+from pcad.domain.constraints import ConstraintRule
 
 class MarginStatus(str, Enum):
     POSITIVE = "POSITIVE"
@@ -50,6 +52,7 @@ class TemplateSpec:
     default_material: str
     build_func: Callable[[Any], Any]
     checks_func: Optional[Callable[[Any, Any, PhysicsResult], List[CheckResult]]] = None
+    constraints: List[ConstraintRule] = field(default_factory=list)
 
     def __call__(self, *args, **kwargs):
         return self.build_func(*args, **kwargs)
@@ -61,7 +64,8 @@ def template(
     name: Union[str, Dict[str, str]] = "",
     description: Union[str, Dict[str, str]] = "",
     params: Optional[Type[BaseModel]] = None,
-    default_material: str = "Al7075-T6"
+    default_material: str = "Al7075-T6",
+    constraints: Optional[List[ConstraintRule]] = None
 ):
     """Decorator to register a function as a CAD template builder."""
     def decorator(fn: Callable[[Any], Any]) -> TemplateSpec:
@@ -73,7 +77,8 @@ def template(
             description=description,
             param_cls=params or BaseModel,
             default_material=default_material,
-            build_func=fn
+            build_func=fn,
+            constraints=constraints or []
         )
         # Store spec on the function object for discovery
         fn._pcad_template_spec = spec

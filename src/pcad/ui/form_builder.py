@@ -1,19 +1,21 @@
-"""Schema-driven dynamic form generation using PySide6."""
+"""Schema-driven dynamic form generation using PySide6 with AST constraint validation."""
 
 from typing import Any, Dict, Optional, Type
 from PySide6 import QtCore, QtWidgets
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
+from pcad.domain.constraints import check_constraint
 from pcad.domain.i18n import t
-from pcad.domain.template import UI
+from pcad.domain.template import TemplateSpec, UI
 
 class SchemaFormWidget(QtWidgets.QWidget):
-    values_changed = Signal = QtCore.Signal(dict)
+    values_changed = QtCore.Signal(dict)
 
     def __init__(self, param_cls: Optional[Type[BaseModel]] = None, parent=None):
         super().__init__(parent)
         self._param_cls = param_cls
+        self._template_spec: Optional[TemplateSpec] = None
         self._widgets: Dict[str, QtWidgets.QWidget] = {}
         self._groups: Dict[str, QtWidgets.QGroupBox] = {}
         
@@ -47,10 +49,11 @@ class SchemaFormWidget(QtWidgets.QWidget):
         if param_cls:
             self.build_form(param_cls)
 
-    def build_form(self, param_cls: Type[BaseModel]):
+    def build_form(self, param_cls: Type[BaseModel], template_spec: Optional[TemplateSpec] = None):
         self.blockSignals(True)
         try:
             self._param_cls = param_cls
+            self._template_spec = template_spec
             self._widgets.clear()
             self._groups.clear()
             
@@ -153,11 +156,24 @@ class SchemaFormWidget(QtWidgets.QWidget):
         if self._param_cls:
             try:
                 self._param_cls(**values)
+                
+                # Check template-level AST constraints
+                if self._template_spec and self._template_spec.constraints:
+                    for rule in self._template_spec.constraints:
+                        ok, detail = check_constraint(rule.expr, values)
+                        if not ok:
+                            msg = t(rule.message) if isinstance(rule.message, dict) else str(rule.message)
+                            self.error_banner.setText(f"⚠️ {msg}")
+                            self.error_banner.setVisible(True)
+                            self._clear_field_errors()
+                            if rule.field and rule.field in self._widgets:
+                                self._widgets[rule.field].setStyleSheet("border: 1px solid #E53E3E; background: #FFF5F5;")
+                            return
+                
                 self._clear_field_errors()
                 self.error_banner.setVisible(False)
                 self.values_changed.emit(values)
             except Exception as e:
-                # Format friendly message from pydantic error
                 err_text = str(e)
                 first_line = err_text.splitlines()[0]
                 if "Value error," in err_text:
@@ -181,7 +197,6 @@ class SchemaFormWidget(QtWidgets.QWidget):
             w.setStyleSheet("")
 
     def _highlight_field_error(self, err_text: str):
-        # Match field names mentioned in error text
         for name, widget in self._widgets.items():
             if name in err_text:
                 widget.setStyleSheet("border: 1px solid #E53E3E; background: #FFF5F5;")

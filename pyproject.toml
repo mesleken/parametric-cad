@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pcad"
-version = "0.1.0"
+version = "0.2.0"
 description = "Deterministic Parametric CAD Desktop Application with Engineering Verification"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -17,6 +17,12 @@ dependencies = [
     "reportlab>=5.0.0",
     "platformdirs>=4.0.0",
     "numpy>=2.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pyinstaller>=6.0.0"
 ]
 
 [project.scripts]

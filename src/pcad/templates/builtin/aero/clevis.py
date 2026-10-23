@@ -16,7 +16,7 @@ class ClevisParams(BaseModel):
     shank_length: Annotated[float, Field(gt=5.0, le=300.0), UI(label={"en": "Shank Length", "tr": "Gövde Şaft Boyu"}, unit="mm", group="geometry", step=5.0)] = 35.0
     
     # Loads
-    load_f_n: Annotated[float, Field(ge=0.0, le=1e7), UI(label={"en": "Axial Limit Load (F)", "tr": "Eksenel Limit Yük (F)"}, unit="N", group="loads", step=1000.0)] = 15000.0
+    load_f_n: Annotated[float, Field(ge=0.0, le=1e7), UI(label={"en": "Axial Limit Load (F)", "tr": "Eksenel Limit Yük (F)"}, unit="N", group="loads", step=500.0)] = 8000.0
     fos: Annotated[float, Field(gt=1.0, le=5.0), UI(label={"en": "Factor of Safety", "tr": "Emniyet Katsayısı"}, unit="-", group="advanced", step=0.1)] = 1.5
 
     @model_validator(mode="after")

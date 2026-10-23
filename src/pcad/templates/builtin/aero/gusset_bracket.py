@@ -16,7 +16,7 @@ class BracketParams(BaseModel):
     gusset_thickness: Annotated[float, Field(gt=1.0, le=30.0), UI(label={"en": "Gusset Thickness", "tr": "Kaburga Kalınlığı"}, unit="mm", group="geometry", step=0.5)] = 4.0
     
     # Loads
-    tip_load_n: Annotated[float, Field(ge=0.0, le=1e6), UI(label={"en": "Tip Load (F)", "tr": "Uç Nokta Yükü (F)"}, unit="N", group="loads", step=500.0)] = 2500.0
+    tip_load_n: Annotated[float, Field(ge=0.0, le=1e6), UI(label={"en": "Tip Load (F)", "tr": "Uç Nokta Yükü (F)"}, unit="N", group="loads", step=100.0)] = 600.0
     fos: Annotated[float, Field(gt=1.0, le=5.0), UI(label={"en": "Factor of Safety", "tr": "Emniyet Katsayısı"}, unit="-", group="advanced", step=0.1)] = 1.5
 
     @model_validator(mode="after")

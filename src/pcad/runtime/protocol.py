@@ -29,6 +29,9 @@ class WorkerError(BaseModel):
     kind: Literal["param_invalid", "geometry_invalid", "code_error", "timeout", "memory", "kernel_crash"]
     message_key: str
     detail: str = ""
+    line_no: Optional[int] = None
+    line_text: Optional[str] = None
+    hint: Optional[str] = None
 
 class ExportRequest(BaseModel):
     req_id: str
