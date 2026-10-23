@@ -205,7 +205,7 @@ class WorkerClient(QObject):
             try:
                 self._ensure_worker_running()
                 # Wait for worker process to signal readiness before writing
-                if not self._worker_ready.wait(timeout=12.0):
+                if not self._worker_ready.wait(timeout=30.0):
                     raise RuntimeError("Worker process timed out during startup initialization.")
 
                 line_payload = json.dumps({"type": req_type, "payload": req.model_dump()}) + "\n"

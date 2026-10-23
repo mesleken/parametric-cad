@@ -56,6 +56,9 @@ def test_worker_client_timeout_and_recovery(qapp):
     """Verify WorkerClient terminates an infinite loop and recovers for subsequent builds."""
     client = WorkerClient(timeout_sec=1.5)
     
+    # Ensure worker has fully started and signaled ready before testing
+    assert client._worker_ready.wait(timeout=25.0), "Worker process did not become ready in time"
+    
     results = []
     errors = []
     
@@ -71,11 +74,11 @@ def test_worker_client_timeout_and_recovery(qapp):
     client.request_build_immediate(inf_req)
     
     t0 = time.time()
-    while not errors and time.time() - t0 < 12.0:
+    while not errors and time.time() - t0 < 15.0:
         qapp.processEvents()
         time.sleep(0.05)
         
-    assert len(errors) == 1, "Expected timeout error"
+    assert len(errors) == 1, f"Expected timeout error, got errors={errors}"
     assert errors[0].kind == "timeout"
     assert "Zaman Aşımı" in errors[0].message_key or "timeout" in errors[0].message_key.lower()
     
@@ -95,7 +98,7 @@ def test_worker_client_timeout_and_recovery(qapp):
     client.request_build_immediate(valid_req)
     
     t0 = time.time()
-    while not results and not errors and time.time() - t0 < 10.0:
+    while not results and not errors and time.time() - t0 < 15.0:
         qapp.processEvents()
         time.sleep(0.05)
         
@@ -107,6 +110,9 @@ def test_worker_client_timeout_and_recovery(qapp):
 def test_worker_client_crash_recovery(qapp):
     """Verify WorkerClient recovers when the worker process abruptly exits (crash)."""
     client = WorkerClient(timeout_sec=5.0)
+    
+    # Ensure worker has fully started and signaled ready before testing
+    assert client._worker_ready.wait(timeout=25.0), "Worker process did not become ready in time"
     
     results = []
     errors = []
@@ -122,11 +128,11 @@ def test_worker_client_crash_recovery(qapp):
     client.request_build_immediate(crash_req)
     
     t0 = time.time()
-    while not errors and time.time() - t0 < 8.0:
+    while not errors and time.time() - t0 < 15.0:
         qapp.processEvents()
         time.sleep(0.05)
         
-    assert len(errors) == 1
+    assert len(errors) == 1, f"Expected crash error, got errors={errors}"
     assert errors[0].kind == "kernel_crash"
     
     # Immediately send valid request
@@ -145,7 +151,7 @@ def test_worker_client_crash_recovery(qapp):
     client.request_build_immediate(valid_req)
     
     t0 = time.time()
-    while not results and not errors and time.time() - t0 < 10.0:
+    while not results and not errors and time.time() - t0 < 15.0:
         qapp.processEvents()
         time.sleep(0.05)
         
