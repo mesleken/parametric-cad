@@ -187,7 +187,7 @@ class MainWindow(QtWidgets.QMainWindow):
         templates = self.registry.list_templates()
         if templates:
             self._select_template_by_id(templates[0].id)
-            self._on_generate_clicked()
+            self._trigger_current_build(immediate=True)
 
     def _select_template_by_id(self, template_id: str):
         idx = self.combo_templates.findData(template_id)
