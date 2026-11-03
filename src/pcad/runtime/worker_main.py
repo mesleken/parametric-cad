@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from build123d import Solid
 from pcad.domain.errors import GeometryError
-from pcad.domain.hashing import compute_model_hash
+from pcad.domain.hashing import compute_model_hash, compute_code_model_hash
 from pcad.domain.materials import Material, MaterialDB
 from pcad.domain.template import CheckResult, PhysicsResult
 from pcad.kernel.physics import compute_physics
@@ -52,17 +52,12 @@ def process_build(req: BuildRequest) -> BuildResult:
             loads=req.loads
         )
     else:
-        # Code mode execution
+        # Code mode execution (B10: canonical SHA-256 code hash)
         if not req.code:
             raise ValueError("Code content must be provided in code mode.")
         spec = None
         param_obj = None
-        model_hash = compute_model_hash(
-            template_id="custom_code",
-            template_version="1.0",
-            params={"code_hash": hash(req.code)},
-            material_id=material.id
-        )
+        model_hash = compute_code_model_hash(req.code, material.id)
         
     t_parse = (time.perf_counter() - t0) * 1000.0
     
@@ -92,10 +87,17 @@ def process_build(req: BuildRequest) -> BuildResult:
                 )
                 raise CodeExecError(err)
 
-            # 2. Execute user code in isolated dictionary scope
-            local_scope: Dict[str, Any] = {}
+            # 2. Execute user code in unified namespace scope (B9)
+            import math
+            import build123d as bd
+            scope: Dict[str, Any] = {
+                "__builtins__": __builtins__,
+                "build123d": bd,
+                "bd": bd,
+                "math": math,
+            }
             try:
-                exec(code_obj, {}, local_scope)
+                exec(code_obj, scope, scope)
             except Exception as e:
                 tb = sys.exc_info()[2]
                 line_no = None
@@ -119,10 +121,10 @@ def process_build(req: BuildRequest) -> BuildResult:
                 )
                 raise CodeExecError(err)
 
-            if "result" in local_scope:
-                raw_part = local_scope["result"]
-            elif "part" in local_scope:
-                raw_part = local_scope["part"]
+            if "result" in scope:
+                raw_part = scope["result"]
+            elif "part" in scope:
+                raw_part = scope["part"]
             else:
                 err = WorkerError(
                     req_id=req.req_id,
@@ -191,9 +193,29 @@ def process_build(req: BuildRequest) -> BuildResult:
 
 def process_export(req: ExportRequest) -> ExportResult:
     if req.model_hash not in _CACHE:
-        raise ValueError(f"Model hash {req.model_hash} not found in worker cache. Re-generation required.")
+        # Rebuild on demand upon cache miss (B18)
+        build_req = BuildRequest(
+            req_id=f"rebuild_{req.req_id}",
+            source=req.source,
+            template_id=req.template_id,
+            template_version=req.template_version,
+            params=req.params,
+            code=req.code,
+            material_id=req.material_id,
+            loads=req.loads,
+            quality="export"
+        )
+        process_build(build_req)
+        if req.model_hash not in _CACHE and _CACHE:
+            recent_hash = next(reversed(_CACHE.keys()))
+            solid, param_obj, material, physics, checks, verts, faces = _CACHE[recent_hash]
+        elif req.model_hash in _CACHE:
+            solid, param_obj, material, physics, checks, verts, faces = _CACHE[req.model_hash]
+        else:
+            raise ValueError(f"Failed to rebuild model for export: {req.model_hash}")
+    else:
+        solid, param_obj, material, physics, checks, verts, faces = _CACHE[req.model_hash]
         
-    solid, param_obj, material, physics, checks, verts, faces = _CACHE[req.model_hash]
     out_path = Path(req.output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -214,11 +236,27 @@ def process_export(req: ExportRequest) -> ExportResult:
         from pcad.report.datasheet import generate_datasheet_pdf
         temp_png = out_path.with_suffix(".temp_preview.png")
         render_mesh_to_png(verts, faces, temp_png, image_size=(800, 600))
-        params_dict = param_obj.model_dump() if hasattr(param_obj, "model_dump") else {}
+        params_dict = param_obj.model_dump() if hasattr(param_obj, "model_dump") else (req.params or {})
+        
+        # Resolve real template name & version (B19)
+        reg = TemplateRegistry.get_default_registry()
+        tpl_name = "PCAD Model"
+        tpl_ver = req.template_version or "1.0.0"
+        if req.template_id:
+            try:
+                spec = reg.get(req.template_id)
+                tpl_name = str(spec.name.get("en") if isinstance(spec.name, dict) else spec.name)
+                tpl_ver = spec.version
+            except Exception:
+                tpl_name = req.template_id
+        elif req.source == "code":
+            tpl_name = "Custom Code Model"
+            tpl_ver = "custom"
+
         generate_datasheet_pdf(
             output_pdf_path=out_path,
-            template_name="PCAD Model",
-            template_version="1.0.0",
+            template_name=tpl_name,
+            template_version=tpl_ver,
             params=params_dict,
             material=material,
             physics=physics,

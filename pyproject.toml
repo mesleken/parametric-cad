@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pcad"
-version = "0.2.0"
+version = "0.3.0"
 description = "Deterministic Parametric CAD Desktop Application with Engineering Verification"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -30,6 +30,13 @@ pcad = "pcad.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+pcad = [
+    "domain/data/*.json",
+    "templates/builtin/**/*.py",
+    "docs/**/*.md"
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

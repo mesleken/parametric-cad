@@ -187,11 +187,13 @@ class MainWindow(QtWidgets.QMainWindow):
         templates = self.registry.list_templates()
         if templates:
             self._select_template_by_id(templates[0].id)
+            self._on_generate_clicked()
 
     def _select_template_by_id(self, template_id: str):
         idx = self.combo_templates.findData(template_id)
         if idx >= 0:
             self.combo_templates.setCurrentIndex(idx)
+            self._on_template_selected(idx)
         else:
             self.current_template = self.registry.get(template_id)
             self._on_template_selected(-1)
@@ -372,7 +374,13 @@ class MainWindow(QtWidgets.QMainWindow):
             req_id=str(uuid.uuid4())[:8],
             model_hash=self.current_model_hash,
             export_format=fmt,
-            output_path=file_path
+            output_path=file_path,
+            source=self.current_mode,
+            template_id=self.current_template.id if self.current_template else None,
+            template_version=self.current_template.version if self.current_template else "1.0.0",
+            params=self.form_widget.get_values(),
+            material_id=self.results_panel.get_selected_material_id(),
+            code=self.code_panel.get_code() if self.current_mode == "code" else None
         )
         self.status_label.setText(f"Exporting {fmt.upper()} to {Path(file_path).name}...")
         self.client.request_export(req)
@@ -426,11 +434,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def _show_batch_dialog(self):
         from pcad.ui.dialogs.batch_dialog import BatchProductionDialog
         current_tpl_id = self.current_template.id if self.current_template else "demo.flange"
-        dlg = BatchProductionDialog(default_template_id=current_tpl_id, parent=self)
+        current_name = t(self.current_template.name) if (self.current_template and isinstance(self.current_template.name, dict)) else (str(self.current_template.name) if self.current_template else "Flange")
+        mat_id = self.results_panel.get_selected_material_id()
+        dlg = BatchProductionDialog(template_id=current_tpl_id, template_name=current_name, material_id=mat_id, parent=self)
         dlg.exec()
 
     def _show_diagnostics(self):
-        from pcad.ui.dialogs.diagnostics_dialog import DiagnosticsDialog
+        from pcad.ui.dialogs.diagnostics import DiagnosticsDialog
         dlg = DiagnosticsDialog(self)
         dlg.exec()
 
@@ -439,7 +449,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self,
             "About PCAD",
             "<b>PCAD - Parametric CAD Application</b><br>"
-            "Engineering Edition v0.2.0<br><br>"
+            "Engineering Edition v0.3.0<br><br>"
             "Offline-first, schema-driven parametric 3D CAD modeling system.<br>"
             "Deterministic solid geometry backed by OpenCASCADE and build123d.<br><br>"
             "© 2026 Meslek CAD Systems."

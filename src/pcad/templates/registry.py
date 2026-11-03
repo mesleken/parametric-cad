@@ -5,8 +5,7 @@ import importlib.util
 import inspect
 from pathlib import Path
 from typing import Dict, List, Optional
-import platformdirs
-
+from pcad.core.paths import get_user_templates_dir
 from pcad.domain.errors import TemplateNotFoundError
 from pcad.domain.template import TemplateSpec
 
@@ -49,7 +48,7 @@ class TemplateRegistry:
                 sys.stderr.write(f"[Warning] Failed to load built-in template {mod_name}: {e}\n")
 
     def _register_user_templates(self):
-        user_dir = Path(platformdirs.user_data_dir("pcad", "pcad")) / "templates"
+        user_dir = get_user_templates_dir()
         if not user_dir.exists():
             return
             

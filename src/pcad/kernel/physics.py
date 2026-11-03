@@ -1,7 +1,7 @@
 """Physical properties calculator (Volume, mass, CoG, bounding box, inertia)."""
 
 from typing import Tuple
-from build123d import Solid
+from build123d import Compound, Solid
 from pcad.domain.materials import Material
 from pcad.domain.template import PhysicsResult
 
@@ -24,17 +24,25 @@ def compute_physics(solid: Solid, material: Material) -> PhysicsResult:
         float(bbox.max.X), float(bbox.max.Y), float(bbox.max.Z)
     )
     
-    # Moment of inertia (matrix diagonal Ixx, Iyy, Izz) in g * mm2
-    # In build123d, solid.moment_of_inertia gives volumetric inertia in mm^5.
+    # Moments of inertia (matrix diagonal Ixx, Iyy, Izz) in g * mm2
+    # In build123d, solid.matrix_of_inertia gives volumetric inertia in mm^5.
     # Scaled by density to get physical inertia:
     try:
-        raw_inertia = solid.moment_of_inertia
-        density_g_mm3 = material.density_g_cm3 / 1000.0
-        # Inertia tensor diagonal elements
-        ixx = float(raw_inertia[0][0]) * density_g_mm3 if hasattr(raw_inertia, "__getitem__") else 0.0
-        iyy = float(raw_inertia[1][1]) * density_g_mm3 if hasattr(raw_inertia, "__getitem__") else 0.0
-        izz = float(raw_inertia[2][2]) * density_g_mm3 if hasattr(raw_inertia, "__getitem__") else 0.0
-        inertia_tuple = (ixx, iyy, izz)
+        if hasattr(solid, "matrix_of_inertia"):
+            raw_mat = solid.matrix_of_inertia
+        elif hasattr(solid, "moment_of_inertia"):
+            raw_mat = solid.moment_of_inertia
+        else:
+            raw_mat = None
+            
+        if raw_mat is not None:
+            density_g_mm3 = material.density_g_cm3 / 1000.0
+            ixx = float(raw_mat[0][0]) * density_g_mm3
+            iyy = float(raw_mat[1][1]) * density_g_mm3
+            izz = float(raw_mat[2][2]) * density_g_mm3
+            inertia_tuple = (ixx, iyy, izz)
+        else:
+            inertia_tuple = (0.0, 0.0, 0.0)
     except Exception:
         inertia_tuple = (0.0, 0.0, 0.0)
         
@@ -43,6 +51,6 @@ def compute_physics(solid: Solid, material: Material) -> PhysicsResult:
         mass_g=round(mass_g, 2),
         surface_area_mm2=round(area_mm2, 2),
         cog_mm=(round(cog_mm[0], 2), round(cog_mm[1], 2), round(cog_mm[2], 2)),
-        bbox_mm=(round(b, 2) for b in bbox_mm),
+        bbox_mm=tuple(round(b, 2) for b in bbox_mm),
         inertia_g_mm2=(round(inertia_tuple[0], 1), round(inertia_tuple[1], 1), round(inertia_tuple[2], 1))
     )

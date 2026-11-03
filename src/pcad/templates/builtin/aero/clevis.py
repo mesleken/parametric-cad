@@ -45,24 +45,26 @@ def build(p: ClevisParams):
     )
     
     total_w = p.gap + (2.0 * p.t_prong)
+    h_base = max(p.t_prong, 10.0)
+    total_h = h_base + p.e_hole
     
     with BuildPart() as builder:
-        # 1. Base shank
+        # 1. Base shank below Z=0
         Cylinder(radius=p.shank_dia / 2.0, height=p.shank_length, align=(Align.CENTER, Align.CENTER, Align.MAX))
         
         # 2. Main clevis head block
         with Locations((0, 0, 0)):
-            Box(total_w, p.w_prong, p.e_hole, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            Box(total_w, p.w_prong, total_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
             # Rounded prong tips
-            with Locations((0, 0, p.e_hole)):
+            with Locations((0, 0, total_h)):
                 Cylinder(radius=p.w_prong / 2.0, height=total_w, rotation=(0, 90, 0))
                 # Pin through hole across both prongs
                 Cylinder(radius=p.d_pin / 2.0, height=total_w * 2.0, rotation=(0, 90, 0), mode=Mode.SUBTRACT)
                 
-        # 3. Cut central gap slot
-        slot_height = p.e_hole + (p.w_prong / 2.0) + 5.0
-        with Locations((0, 0, 0)):
-            Box(p.gap, p.w_prong * 2.0, slot_height * 2.0, align=(Align.CENTER, Align.CENTER, Align.CENTER), mode=Mode.SUBTRACT)
+        # 3. Cut central gap slot starting at Z = h_base (preserving continuous solid base web)
+        slot_height = p.e_hole + (p.w_prong / 2.0) + 10.0
+        with Locations((0, 0, h_base)):
+            Box(p.gap, p.w_prong * 2.0, slot_height, align=(Align.CENTER, Align.CENTER, Align.MIN), mode=Mode.SUBTRACT)
             
     return builder.part
 

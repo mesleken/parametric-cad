@@ -53,9 +53,10 @@ def build(p: FlangeParams):
             with Locations((0, 0, p.flange_thickness / 2.0 + p.neck_height / 2.0)):
                 Cylinder(radius=p.neck_outer_dia / 2.0, height=p.neck_height)
                 
-        # 3. Central bore through entire part
-        total_h = p.flange_thickness + p.neck_height + 10.0
-        with Locations((0, 0, 0)):
+        # 3. Central bore through entire part (from bottom of disk to top of neck)
+        total_h = p.flange_thickness + p.neck_height + 20.0
+        bore_z_mid = p.neck_height / 2.0
+        with Locations((0, 0, bore_z_mid)):
             Cylinder(radius=p.inner_dia / 2.0, height=total_h, mode=Mode.SUBTRACT)
             
         # 4. Bolt hole pattern

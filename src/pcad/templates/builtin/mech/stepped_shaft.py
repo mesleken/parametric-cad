@@ -59,29 +59,37 @@ class SteppedShaftParams(BaseModel):
 )
 def build(p: SteppedShaftParams):
     from build123d import (
-        BuildPart, Cylinder, Box, Locations, Mode, Axis, fillet, chamfer
+        BuildPart, Cylinder, Box, Locations, Mode, Align, GeomType, fillet
     )
     
     with BuildPart() as builder:
         # 1. Journal 1 (Z: 0 to l1)
-        Cylinder(radius=p.d1 / 2.0, height=p.l1)
+        Cylinder(radius=p.d1 / 2.0, height=p.l1, align=(Align.CENTER, Align.CENTER, Align.MIN))
         
         # 2. Shoulder 2 (Z: l1 to l1 + l2)
-        with Locations((0, 0, (p.l1 / 2.0) + (p.l2 / 2.0))):
-            Cylinder(radius=p.d2 / 2.0, height=p.l2)
+        with Locations((0, 0, p.l1)):
+            Cylinder(radius=p.d2 / 2.0, height=p.l2, align=(Align.CENTER, Align.CENTER, Align.MIN))
             
         # 3. Journal 3 (Z: l1 + l2 to l1 + l2 + l3)
-        with Locations((0, 0, (p.l1 / 2.0) + p.l2 + (p.l3 / 2.0))):
-            Cylinder(radius=p.d3 / 2.0, height=p.l3)
+        with Locations((0, 0, p.l1 + p.l2)):
+            Cylinder(radius=p.d3 / 2.0, height=p.l3, align=(Align.CENTER, Align.CENTER, Align.MIN))
             
-        # 4. Cut DIN 6885 Keyway on Journal 1 if requested
-        if p.has_keyway:
-            kw_z = (p.l1 / 2.0) - (p.l1 / 2.0) + (p.kw_length / 2.0) + 5.0 # Centered with 5mm offset
-            kw_y = (p.d1 / 2.0) - (p.kw_depth / 2.0)
-            with Locations((0, kw_y, kw_z - (p.l1 / 2.0) + (p.kw_length / 2.0))):
-                Box(p.kw_width, p.kw_depth + 1.0, p.kw_length, mode=Mode.SUBTRACT)
+        # 4. Shoulder transition fillets
+        if p.r_fillet > 0:
+            shoulder_edges = builder.edges().filter_by(GeomType.CIRCLE).filter_by(
+                lambda e: (abs(e.center().Z - p.l1) < 1e-3 and abs(e.radius - p.d1 / 2.0) < 1e-3) or
+                          (abs(e.center().Z - (p.l1 + p.l2)) < 1e-3 and abs(e.radius - p.d3 / 2.0) < 1e-3)
+            )
+            if shoulder_edges:
+                fillet(shoulder_edges, radius=p.r_fillet)
 
-    part = builder.part
-    return part
+        # 5. Cut DIN 6885 Keyway centered on Journal 1 (strictly within 0 to l1)
+        if p.has_keyway:
+            kw_z = p.l1 / 2.0
+            kw_y = (p.d1 / 2.0) - (p.kw_depth / 2.0)
+            with Locations((0, kw_y, kw_z)):
+                Box(p.kw_width, p.kw_depth, p.kw_length, mode=Mode.SUBTRACT)
+
+    return builder.part
 
 build.checks_func = check_stepped_shaft

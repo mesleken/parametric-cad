@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 import re
 from typing import Any, Dict, List, Optional, Tuple
-import platformdirs
+from pcad.core.paths import get_user_templates_dir
 
 class ExtractedParam(tuple):
     def __new__(cls, name: str, default: Any, type_str: str, func_name: str = "custom_part"):
@@ -120,9 +120,20 @@ def promote_script_to_template(
             field_args.append(f"le={max_val}")
         field_clause = f"Field({', '.join(field_args)})" if field_args else "Field()"
         
+        if vtype == "str":
+            val_repr = repr(str(val))
+        elif vtype == "bool":
+            val_repr = str(bool(val))
+        elif vtype == "int":
+            val_repr = str(int(val))
+        elif vtype == "float":
+            val_repr = str(float(val))
+        else:
+            val_repr = repr(val)
+        
         label_str = name.replace("_", " ").title()
         ui_clause = f'UI(label="{label_str}", unit="{unit}")'
-        fields_code.append(f"    {name}: Annotated[{vtype}, {field_clause}, {ui_clause}] = {val}")
+        fields_code.append(f"    {name}: Annotated[{vtype}, {field_clause}, {ui_clause}] = {val_repr}")
         
     param_class_src = "\n".join(fields_code)
     
@@ -192,7 +203,7 @@ class {param_class_name}(BaseModel):
 
 {exec_body}
 '''
-    user_tpl_dir = Path(platformdirs.user_data_dir("pcad", "Meslek")) / "templates"
+    user_tpl_dir = get_user_templates_dir()
     user_tpl_dir.mkdir(parents=True, exist_ok=True)
     out_file = user_tpl_dir / f"{slug}.py"
     out_file.write_text(file_content, encoding="utf-8")

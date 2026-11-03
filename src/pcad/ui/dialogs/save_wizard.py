@@ -3,7 +3,6 @@
 import ast
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import platformdirs
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from pcad.codemode.ast_extract import extract_parameters_from_ast, promote_script_to_template
@@ -174,35 +173,77 @@ class SaveTemplateWizardDialog(QtWidgets.QDialog):
         return params
 
     def _on_test_validation(self):
-        """Runs 3-point test evaluation (default, min, max) to ensure geometry stability."""
+        """Runs 3-point test evaluation (default, min, max) in an isolated subprocess (B16, D10)."""
+        import subprocess, sys, json
+
+        runner_script = """
+import sys, json, math
+import build123d as bd
+
+code_str = sys.stdin.read()
+kwargs = json.loads(sys.argv[1])
+
+scope = {
+    "__builtins__": __builtins__,
+    "build123d": bd,
+    "bd": bd,
+    "math": math,
+}
+
+exec(code_str, scope, scope)
+
+fn = None
+for k, v in scope.items():
+    if callable(v) and not k.startswith("_"):
+        fn = v
+        break
+
+if fn:
+    res = fn(**kwargs)
+else:
+    for k, v in kwargs.items():
+        scope[k] = v
+    exec(code_str, scope, scope)
+    res = scope.get("result", scope.get("part"))
+
+if not hasattr(res, "volume") and not hasattr(res, "wrapped"):
+    raise TypeError(f"Function or script must produce a Solid, got '{type(res).__name__}'")
+
+vol = float(getattr(res, "volume", 0.0))
+if vol <= 1e-4:
+    raise ValueError(f"Generated volume is non-positive: {vol:.2f} mm³")
+
+print(json.dumps({"success": True, "volume": vol}))
+"""
+
+        def run_point(point_name: str, kwargs: dict) -> float:
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-c", runner_script, json.dumps(kwargs)],
+                    input=self.code_str,
+                    text=True,
+                    capture_output=True,
+                    timeout=15.0
+                )
+            except subprocess.TimeoutExpired:
+                raise TimeoutError(f"[{point_name}] Model üretimi zaman aşımına uğradı (15s).")
+
+            if proc.returncode != 0:
+                err_text = proc.stderr.strip() or proc.stdout.strip() or f"Process error (code {proc.returncode})"
+                # Extract clean last line of traceback
+                lines = [l for l in err_text.splitlines() if l.strip()]
+                clean_err = lines[-1] if lines else err_text
+                raise RuntimeError(f"[{point_name}] {clean_err}")
+
+            try:
+                out = json.loads(proc.stdout.strip().splitlines()[-1])
+                return out["volume"]
+            except Exception as parse_err:
+                raise RuntimeError(f"[{point_name}] Çıktı ayrıştırılamadı: {proc.stdout}")
+
         try:
-            local_scope = {}
-            exec(self.code_str, {}, local_scope)
-            
-            # Find candidate callable
-            fn = None
-            for k, v in local_scope.items():
-                if callable(v) and not k.startswith("_"):
-                    fn = v
-                    break
-                    
             params = self._get_table_parameters()
             
-            def run_point(point_name: str, kwargs: dict):
-                if fn:
-                    res = fn(**kwargs)
-                else:
-                    scope = dict(kwargs)
-                    exec(self.code_str, {}, scope)
-                    res = scope.get("result", scope.get("part"))
-                    
-                if not hasattr(res, "volume") and not hasattr(res, "wrapped"):
-                    raise ValueError(f"[{point_name}] Fonksiyon katı nesnesi (Solid) döndürmeli, '{type(res).__name__}' döndürdü.")
-                vol = getattr(res, "volume", 0.0)
-                if vol <= 1e-4:
-                    raise ValueError(f"[{point_name}] Üretilen katının hacmi sıfır veya negatif ({vol:.2f} mm³).")
-                return vol
-
             # 1. Default test
             def_kwargs = {p["name"]: p["default"] for p in params}
             vol_def = run_point("Varsayılan Değerler", def_kwargs)

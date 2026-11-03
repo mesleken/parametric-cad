@@ -11,7 +11,7 @@ class BracketParams(BaseModel):
     length_upright: Annotated[float, Field(gt=15.0, le=400.0), UI(label={"en": "Upright Leg Length", "tr": "Dikey Kol Boyu"}, unit="mm", group="geometry", step=5.0)] = 90.0
     width: Annotated[float, Field(gt=10.0, le=300.0), UI(label={"en": "Bracket Width", "tr": "Braket Genişliği"}, unit="mm", group="geometry", step=5.0)] = 50.0
     thickness: Annotated[float, Field(gt=1.5, le=40.0), UI(label={"en": "Plate Thickness (t)", "tr": "Et Kalınlığı (t)"}, unit="mm", group="geometry", step=0.5)] = 5.0
-    inner_radius: Annotated[float, Field(ge=0.5, le=30.0), UI(label={"en": "Inner Bend Radius", "tr": "İç Büküm Radyusu"}, unit="mm", group="geometry", step=0.5)] = 7.5
+    inner_radius: Annotated[float, Field(ge=0.0, le=30.0), UI(label={"en": "Inner Bend Radius", "tr": "İç Büküm Radyusu"}, unit="mm", group="geometry", step=0.5)] = 7.5
     gusset_count: Annotated[int, Field(ge=0, le=5), UI(label={"en": "Gusset Rib Count", "tr": "Kaburga Sayısı"}, unit="-", group="geometry", step=1.0)] = 1
     gusset_thickness: Annotated[float, Field(gt=1.0, le=30.0), UI(label={"en": "Gusset Thickness", "tr": "Kaburga Kalınlığı"}, unit="mm", group="geometry", step=0.5)] = 4.0
     
@@ -23,6 +23,12 @@ class BracketParams(BaseModel):
     def validate_bracket(self):
         if self.thickness >= min(self.length_base, self.length_upright):
             raise ValueError("Thickness cannot exceed leg lengths.")
+        if self.inner_radius >= min(self.length_base - self.thickness, self.length_upright - self.thickness):
+            raise ValueError("Inner bend radius exceeds available leg length.")
+        if self.gusset_count > 0:
+            total_gusset_w = self.gusset_count * self.gusset_thickness
+            if total_gusset_w >= self.width:
+                raise ValueError("Total thickness of gusset ribs exceeds bracket width.")
         return self
 
 @template(
@@ -39,7 +45,7 @@ class BracketParams(BaseModel):
 )
 def build(p: BracketParams):
     from build123d import (
-        BuildPart, Box, Wedge, Locations, Mode, Align
+        BuildPart, Box, Locations, Mode, Align, BuildSketch, Polygon, extrude, Plane, Axis, fillet
     )
     
     with BuildPart() as builder:
@@ -49,20 +55,29 @@ def build(p: BracketParams):
         # 2. Upright vertical plate
         Box(p.thickness, p.width, p.length_upright, align=(Align.MIN, Align.CENTER, Align.MIN))
         
-        # 3. Gusset rib(s)
+        # 3. Model inner bend radius if specified
+        if p.inner_radius > 0:
+            inner_edges = builder.edges().filter_by(Axis.Y).filter_by(
+                lambda e: abs(e.center().X - p.thickness) < 1e-3 and abs(e.center().Z - p.thickness) < 1e-3
+            )
+            if inner_edges:
+                fillet(inner_edges, radius=p.inner_radius)
+        
+        # 4. Gusset rib(s) evenly distributed across bracket width
         if p.gusset_count > 0 and p.gusset_thickness > 0:
             gusset_dx = p.length_base * 0.65
             gusset_dz = p.length_upright * 0.65
+            spacing = p.width / (p.gusset_count + 1)
             
-            from build123d import BuildSketch, Polygon, extrude, Plane
-            with BuildSketch(Plane.XZ) as sk:
-                Polygon([
-                    (p.thickness, p.thickness),
-                    (gusset_dx, p.thickness),
-                    (p.thickness, gusset_dz)
-                ])
-            # Extrude in Y centered
-            extrude(amount=p.gusset_thickness / 2.0, both=True)
+            for i in range(1, p.gusset_count + 1):
+                y_pos = -p.width / 2.0 + i * spacing
+                with BuildSketch(Plane.XZ.offset(y_pos)):
+                    Polygon([
+                        (p.thickness, p.thickness),
+                        (gusset_dx, p.thickness),
+                        (p.thickness, gusset_dz)
+                    ])
+                extrude(amount=p.gusset_thickness / 2.0, both=True)
             
     return builder.part
 

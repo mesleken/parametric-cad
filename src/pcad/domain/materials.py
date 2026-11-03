@@ -25,12 +25,13 @@ class MaterialDB:
     def __init__(self, data_file: Optional[Path] = None):
         self._materials = {}
         target_path = data_file or (Path(__file__).parent / "data" / "materials.json")
-        if target_path.exists():
-            with open(target_path, "r", encoding="utf-8") as f:
-                raw_list = json.load(f)
-                for item in raw_list:
-                    mat = Material(**item)
-                    self._materials[mat.id] = mat
+        if not target_path.exists():
+            raise FileNotFoundError(f"Material database file not found: {target_path}")
+        with open(target_path, "r", encoding="utf-8") as f:
+            raw_list = json.load(f)
+            for item in raw_list:
+                mat = Material(**item)
+                self._materials[mat.id] = mat
 
     @classmethod
     def get_default_db(cls) -> "MaterialDB":
@@ -44,14 +45,7 @@ class MaterialDB:
     def get(self, material_id: str) -> Material:
         if material_id in self._materials:
             return self._materials[material_id]
-        # Fallback to first available material
-        if self._materials:
-            return next(iter(self._materials.values()))
-        return Material(
-            id="Default-Al",
-            name="Generic Aluminium",
-            density_g_cm3=2.7,
-            yield_strength_mpa=250.0,
-            ultimate_strength_mpa=300.0,
-            shear_strength_mpa=180.0
+        raise KeyError(
+            f"Unknown material ID: '{material_id}'. "
+            f"Available materials: {list(self._materials.keys())}"
         )

@@ -74,12 +74,12 @@ class ResultsPanel(QtWidgets.QWidget):
         self.lbl_disclaimer.setStyleSheet("color: #718096; font-size: 10px; font-style: italic; border-top: 1px solid #E2E8F0; padding-top: 4px;")
         ana_layout.addWidget(self.lbl_disclaimer)
         
-        self.sub_tabs.addTab(tab_analysis, "Results & Margins")
+        self.sub_tabs.addTab(tab_analysis, t("tab.results_margins", default="Results && Margins"))
         
         # Tab 2: Method & Theory
         self.method_browser = QtWidgets.QTextBrowser()
         self.method_browser.setOpenExternalLinks(True)
-        self.sub_tabs.addTab(self.method_browser, "Method & Theory")
+        self.sub_tabs.addTab(self.method_browser, t("tab.method_theory", default="Method && Theory"))
         
         layout.addWidget(self.sub_tabs)
 

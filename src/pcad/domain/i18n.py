@@ -39,6 +39,11 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "unit.n": "N",
         "unit.mpa": "MPa",
         "unit.deg": "deg",
+        "library.search_placeholder": "Search templates...",
+        "err.project_load_failed": "Failed to load project",
+        "err.multiple_solids": "Generated geometry contains multiple disconnected solids",
+        "tab.results_margins": "Results && Margins",
+        "tab.method_theory": "Method && Theory",
         "err.pin_ge_width": "Pin diameter (D) must be less than lug width (W)",
         "err.edge_too_small": "Edge distance (e) must be greater than D/2",
         "err.invalid_geometry": "Geometry self-intersection or non-manifold solid generated",
@@ -76,6 +81,11 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "unit.n": "N",
         "unit.mpa": "MPa",
         "unit.deg": "derece",
+        "library.search_placeholder": "Şablon ara...",
+        "err.project_load_failed": "Proje yüklenemedi",
+        "err.multiple_solids": "Oluşturulan geometri birden fazla bağımsız katı gövde içeriyor",
+        "tab.results_margins": "Sonuçlar && Marjlar",
+        "tab.method_theory": "Yöntem && Teori",
         "err.pin_ge_width": "Pim çapı (D) kulak genişliğinden (W) küçük olmalıdır",
         "err.edge_too_small": "Kenar mesafesi (e) D/2 değerinden büyük olmalıdır",
         "err.invalid_geometry": "Geometri kesişimi veya geçersiz katı gövde oluştu",
@@ -90,13 +100,19 @@ def set_language(lang: str) -> None:
 def get_language() -> str:
     return _CURRENT_LANG
 
-def t(key_or_dict: Union[str, Dict[str, str]], lang: str = None, **kwargs: Any) -> str:
+def t(key_or_dict: Union[str, Dict[str, str]], lang: str = None, default: str = None, **kwargs: Any) -> str:
     target_lang = lang or _CURRENT_LANG
     if isinstance(key_or_dict, dict):
-        text = key_or_dict.get(target_lang) or key_or_dict.get("en") or next(iter(key_or_dict.values()), "")
+        text = key_or_dict.get(target_lang) or key_or_dict.get("en") or (default if default is not None else next(iter(key_or_dict.values()), ""))
     else:
         lang_dict = TRANSLATIONS.get(target_lang, TRANSLATIONS["en"])
-        text = lang_dict.get(key_or_dict) or TRANSLATIONS["en"].get(key_or_dict, key_or_dict)
+        val = lang_dict.get(key_or_dict) or TRANSLATIONS["en"].get(key_or_dict)
+        if val is not None:
+            text = val
+        elif default is not None:
+            text = default
+        else:
+            text = key_or_dict
     
     if kwargs:
         try:

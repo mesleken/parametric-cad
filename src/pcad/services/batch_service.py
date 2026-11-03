@@ -9,10 +9,9 @@ from pydantic import BaseModel
 
 from pcad.domain.hashing import compute_model_hash
 from pcad.domain.materials import MaterialDB
-from pcad.kernel.physics import compute_physics
 from pcad.kernel.step_io import export_step_file
 from pcad.kernel.stl_io import export_stl_file
-from pcad.kernel.validate import validate_solid
+from pcad.services.model_service import ModelRequest, ModelService
 from pcad.templates.registry import TemplateRegistry
 
 class BatchRowResult(BaseModel):
@@ -40,6 +39,7 @@ class BatchService:
     def __init__(self, registry: Optional[TemplateRegistry] = None, mat_db: Optional[MaterialDB] = None):
         self.registry = registry or TemplateRegistry.get_default_registry()
         self.mat_db = mat_db or MaterialDB.get_default_db()
+        self.model_service = ModelService(self.registry, self.mat_db)
 
     def generate_sample_csv(self, template_id: str, out_path: Path) -> Path:
         """Generates a sample CSV template for the given CAD template with default values."""
@@ -139,18 +139,17 @@ class BatchService:
                     progress_callback(idx, total_rows, row_res)
                 continue
 
-            # 3. Build geometry and compute physics
+            # 3. Build geometry and compute physics via unified ModelService (D5, D7)
             try:
-                raw_part = spec.build_func(param_obj)
-                solid = validate_solid(raw_part)
-                phys = compute_physics(solid, material)
-                
-                model_hash = compute_model_hash(
+                resp = self.model_service.generate(ModelRequest(
+                    source="template",
                     template_id=spec.id,
-                    template_version=spec.version,
                     params=param_obj.model_dump(),
                     material_id=material.id
-                )
+                ))
+                solid = resp.solid
+                phys = resp.physics
+                model_hash = resp.model_hash
                 
                 step_file = None
                 stl_file = None

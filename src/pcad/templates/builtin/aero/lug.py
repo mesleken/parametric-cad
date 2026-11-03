@@ -12,6 +12,7 @@ class LugParams(BaseModel):
     D: Annotated[float, Field(gt=3.0, le=100.0), UI(label={"en": "Pin Hole Dia (D)", "tr": "Pim Deliği Çapı (D)"}, unit="mm", group="geometry", step=1.0)] = 12.0
     e: Annotated[float, Field(gt=5.0, le=200.0), UI(label={"en": "Edge Distance (e)", "tr": "Kenar Mesafesi (e)"}, unit="mm", group="geometry", step=1.0)] = 24.0
     t: Annotated[float, Field(gt=2.0, le=60.0), UI(label={"en": "Lug Thickness (t)", "tr": "Kulak Kalınlığı (t)"}, unit="mm", group="geometry", step=1.0)] = 8.0
+    stem_height: Annotated[float, Field(gt=10.0, le=400.0), UI(label={"en": "Stem Height", "tr": "Gövde Yüksekliği"}, unit="mm", group="geometry", step=5.0)] = 30.0
     
     # Base Mounting Plate
     base_length: Annotated[float, Field(gt=10.0, le=400.0), UI(label={"en": "Base Length", "tr": "Taban Boyu"}, unit="mm", group="geometry", step=5.0)] = 60.0
@@ -64,14 +65,28 @@ def build(p: LugParams):
             with GridLocations(pitch_x, pitch_y, 2, 2):
                 Cylinder(radius=p.mount_hole_dia / 2.0, height=p.base_thickness * 2.0, mode=Mode.SUBTRACT)
                 
-        # 3. Upright lug body
+        # 3. Upright stem up to hole center
+        h_hole = p.base_thickness + p.stem_height
         with Locations((0, 0, p.base_thickness)):
-            Box(p.t, p.W, p.e, align=(Align.CENTER, Align.CENTER, Align.MIN))
-            # Rounded top eye
-            with Locations((0, 0, p.e)):
+            Box(p.t, p.W, p.stem_height, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            
+        # 4. Lug head above hole center
+        # Tip distance from hole center must be exactly e
+        if p.e >= (p.W / 2.0):
+            extension = p.e - (p.W / 2.0)
+            if extension > 0:
+                with Locations((0, 0, h_hole)):
+                    Box(p.t, p.W, extension, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            with Locations((0, 0, h_hole + extension)):
                 Cylinder(radius=p.W / 2.0, height=p.t, rotation=(0, 90, 0))
-                # Pin through hole
-                Cylinder(radius=p.D / 2.0, height=p.t * 2.5, rotation=(0, 90, 0), mode=Mode.SUBTRACT)
+        else:
+            with Locations((0, 0, h_hole)):
+                Cylinder(radius=p.e, height=p.t, rotation=(0, 90, 0))
+                Box(p.t, p.W, p.e, align=(Align.CENTER, Align.CENTER, Align.MIN))
+                
+        # 5. Pin hole at h_hole
+        with Locations((0, 0, h_hole)):
+            Cylinder(radius=p.D / 2.0, height=p.t * 2.5, rotation=(0, 90, 0), mode=Mode.SUBTRACT)
                 
     return builder.part
 

@@ -4,10 +4,10 @@ import math
 from typing import List
 from pcad.domain.materials import Material
 from pcad.domain.template import CheckResult, MarginStatus, PhysicsResult
-from pcad.engineering.margins import compute_margin_of_safety
+from pcad.engineering.margins import compute_margin_of_safety, evaluate_status
 
 def check_stepped_shaft(params, material: Material, physics: PhysicsResult) -> List[CheckResult]:
-    """Evaluates torsional shear, bending, and shoulder fillet stress concentrations.
+    """Evaluates torsional shear and shoulder fillet stress concentrations.
     
     References:
     - Shigley's Mechanical Engineering Design, Ch. 7 (Shafts and Shaft Components)
@@ -15,21 +15,18 @@ def check_stepped_shaft(params, material: Material, physics: PhysicsResult) -> L
     """
     checks = []
     
-    # 1. Torsional Shear Stress in smallest diameter section (d1)
-    # tau = 16 * T / (pi * d1^3)
-    torque_n_mm = getattr(params, "torque_nm", 100.0) * 1000.0 # Convert Nm to N*mm
-    d1 = params.d1
-    tau_applied = (16.0 * torque_n_mm) / (math.pi * (d1 ** 3))
+    # 1. Torsional Shear Stress in smallest diameter section d_min = min(d1, d3)
+    # tau = 16 * T / (pi * d_min^3)
+    torque_n_mm = getattr(params, "torque_nm", 150.0) * 1000.0 # Convert Nm to N*mm
+    d_min = min(params.d1, params.d3)
+    tau_applied = (16.0 * torque_n_mm) / (math.pi * (d_min ** 3))
     
-    # Allowable shear yield (tau_yield = 0.577 * sigma_yield via Von Mises)
-    allowable_shear = material.shear_strength_mpa or (0.577 * material.yield_strength_mpa)
+    # Allowable shear yield via Von Mises distortion energy: tau_y = 0.577 * sigma_yield
+    allowable_shear = 0.577 * material.yield_strength_mpa
     fos = getattr(params, "fos", 1.5)
     
     ms_torsion = compute_margin_of_safety(applied=tau_applied, allowable=allowable_shear, fos=fos)
-    status_torsion = (
-        MarginStatus.POSITIVE if ms_torsion >= 0.2
-        else (MarginStatus.LOW if ms_torsion >= 0.0 else MarginStatus.NEGATIVE)
-    )
+    status_torsion = evaluate_status(ms_torsion)
     checks.append(CheckResult(
         name="Torsional Shear Stress (tau)",
         applied=round(tau_applied, 1),
@@ -38,18 +35,15 @@ def check_stepped_shaft(params, material: Material, physics: PhysicsResult) -> L
         unit="MPa",
         status=status_torsion,
         rule_ref="Shigley Ch. 7, Eq. 7-1 (Von Mises shear)",
-        message=f"Torsional stress on d={d1}mm journal under {params.torque_nm} Nm torque."
+        message=f"Torsional stress on smallest journal section (d={d_min}mm) under {params.torque_nm} N·m torque."
     ))
 
-    # 2. Shoulder Fillet Ratio Check (r / d1 >= 0.05 recommended to limit Kt <= 1.8)
-    fillet_ratio = params.r_fillet / params.d1
+    # 2. Shoulder Fillet Ratio Check (r / d_min >= 0.05 recommended to limit Kt <= 1.8)
+    fillet_ratio = params.r_fillet / d_min
     ms_fillet = compute_margin_of_safety(applied=0.05, allowable=fillet_ratio, fos=1.0)
-    status_fillet = (
-        MarginStatus.POSITIVE if fillet_ratio >= 0.05
-        else MarginStatus.NEGATIVE
-    )
+    status_fillet = evaluate_status(ms_fillet)
     checks.append(CheckResult(
-        name="Shoulder Fillet Ratio (r / d1)",
+        name="Shoulder Fillet Ratio (r / d_min)",
         applied=round(fillet_ratio, 3),
         allowable=0.05,
         margin_of_safety=round(ms_fillet, 3),
