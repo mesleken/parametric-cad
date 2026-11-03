@@ -19,9 +19,11 @@ class LugParams(BaseModel):
     base_width: Annotated[float, Field(gt=10.0, le=300.0), UI(label={"en": "Base Width", "tr": "Taban Eni"}, unit="mm", group="geometry", step=5.0)] = 50.0
     base_thickness: Annotated[float, Field(gt=2.0, le=50.0), UI(label={"en": "Base Thickness", "tr": "Taban Kalınlığı"}, unit="mm", group="geometry", step=1.0)] = 10.0
     mount_hole_dia: Annotated[float, Field(ge=0.0, le=30.0), UI(label={"en": "Base Mount Hole Ø", "tr": "Taban Montaj Delik Ø"}, unit="mm", group="geometry", step=1.0)] = 6.0
+    root_fillet: Annotated[float, Field(ge=0.0, le=20.0), UI(label={"en": "Root Fillet (R)", "tr": "Kök Radyusu (R)"}, unit="mm", group="geometry", step=0.5)] = 0.0
     
     # Design Loads & Advanced Factors
-    load_f_n: Annotated[float, Field(ge=0.0, le=1e7), UI(label={"en": "Axial Limit Load (F)", "tr": "Eksenel Limit Yük (F)"}, unit="N", group="loads", step=1000.0)] = 12000.0
+    load_f_n: Annotated[float, Field(ge=0.0, le=1e7), UI(label={"en": "Applied Limit Load (F)", "tr": "Uygulanan Limit Yük (F)"}, unit="N", group="loads", step=1000.0)] = 12000.0
+    load_angle_deg: Annotated[float, Field(ge=0.0, le=90.0), UI(label={"en": "Load Angle (θ)", "tr": "Yük Açısı (θ)"}, unit="deg", group="loads", step=5.0)] = 0.0
     fos: Annotated[float, Field(gt=1.0, le=5.0), UI(label={"en": "Factor of Safety (FoS)", "tr": "Emniyet Katsayısı (FoS)"}, unit="-", group="advanced", step=0.1)] = 1.5
     k_tu: Annotated[float, Field(gt=0.2, le=1.2), UI(label={"en": "Net-Section Factor (Ktu)", "tr": "Net Kesit Verim Faktörü (Ktu)"}, unit="-", group="advanced", step=0.05, help={"en": "From Bruhn D1.2 / MMPDS curves. 1.0 is NOT conservative for high-strength alloys.", "tr": "Bruhn D1.2 eğrilerinden girilmelidir. 1.0 muhafazakâr değildir."})] = 1.0
 
@@ -87,6 +89,15 @@ def build(p: LugParams):
         # 5. Pin hole at h_hole
         with Locations((0, 0, h_hole)):
             Cylinder(radius=p.D / 2.0, height=p.t * 2.5, rotation=(0, 90, 0), mode=Mode.SUBTRACT)
+
+        # 6. Junction fillet at base mounting plate
+        if p.root_fillet > 0.0:
+            from build123d import Axis, fillet
+            junction_edges = builder.edges().filter_by(Axis.Y).filter_by(
+                lambda ed: abs(ed.center().Z - p.base_thickness) < 1e-3 and abs(abs(ed.center().X) - p.t / 2.0) < 1e-3
+            )
+            if junction_edges:
+                fillet(junction_edges, radius=p.root_fillet)
                 
     return builder.part
 
@@ -99,6 +110,7 @@ def checks(p: LugParams, material: Material, physics: PhysicsResult) -> List[Che
         F_axial_N=p.load_f_n,
         material=material,
         K_tu=p.k_tu,
+        load_angle_deg=p.load_angle_deg,
         fos=p.fos
     )
 

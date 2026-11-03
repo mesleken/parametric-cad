@@ -25,6 +25,7 @@ class SteppedShaftParams(BaseModel):
     kw_width: Annotated[float, Field(gt=1.0, le=30.0), UI(label={"en": "Keyway Width", "tr": "Kama Genişliği"}, unit="mm", group="features", step=1.0)] = 8.0
     kw_depth: Annotated[float, Field(gt=0.5, le=15.0), UI(label={"en": "Keyway Depth", "tr": "Kama Derinliği"}, unit="mm", group="features", step=0.5)] = 4.0
     r_fillet: Annotated[float, Field(ge=0.5, le=20.0), UI(label={"en": "Shoulder Fillet Radius", "tr": "Geçiş Radyusu (r)"}, unit="mm", group="features", step=0.5)] = 2.0
+    chamfer: Annotated[float, Field(ge=0.0, le=10.0), UI(label={"en": "End Chamfer (DIN 509)", "tr": "Uç Pahı (DIN 509)"}, unit="mm", group="features", step=0.5)] = 1.0
     
     # Loads
     torque_nm: Annotated[float, Field(ge=0.0, le=50000.0), UI(label={"en": "Transmitted Torque", "tr": "İletilen Tork"}, unit="N·m", group="loads", step=25.0)] = 150.0
@@ -59,7 +60,7 @@ class SteppedShaftParams(BaseModel):
 )
 def build(p: SteppedShaftParams):
     from build123d import (
-        BuildPart, Cylinder, Box, Locations, Mode, Align, GeomType, fillet
+        BuildPart, BuildSketch, Cylinder, Box, SlotOverall, Plane, Locations, Mode, Align, GeomType, fillet, chamfer, extrude
     )
     
     with BuildPart() as builder:
@@ -83,12 +84,28 @@ def build(p: SteppedShaftParams):
             if shoulder_edges:
                 fillet(shoulder_edges, radius=p.r_fillet)
 
-        # 5. Cut DIN 6885 Keyway centered on Journal 1 (strictly within 0 to l1)
-        if p.has_keyway:
+        # 5. Cut DIN 6885-1 Form A Keyway centered on Journal 1 (strictly within 0 to l1)
+        if p.has_keyway and p.kw_length > p.kw_width:
+            kw_z = p.l1 / 2.0
+            with BuildSketch(Plane.XZ.offset(p.d1 / 2.0)):
+                with Locations((0, kw_z)):
+                    SlotOverall(width=p.kw_length, height=p.kw_width, rotation=90)
+            extrude(amount=-p.kw_depth, mode=Mode.SUBTRACT)
+        elif p.has_keyway:
             kw_z = p.l1 / 2.0
             kw_y = (p.d1 / 2.0) - (p.kw_depth / 2.0)
             with Locations((0, kw_y, kw_z)):
                 Box(p.kw_width, p.kw_depth, p.kw_length, mode=Mode.SUBTRACT)
+
+        # 6. DIN 509 / ISO 13715 mounting chamfers at shaft ends
+        if p.chamfer > 0:
+            total_len = p.l1 + p.l2 + p.l3
+            end_edges = builder.edges().filter_by(GeomType.CIRCLE).filter_by(
+                lambda e: (abs(e.center().Z) < 1e-3 and abs(e.radius - p.d1 / 2.0) < 1e-3) or
+                          (abs(e.center().Z - total_len) < 1e-3 and abs(e.radius - p.d3 / 2.0) < 1e-3)
+            )
+            if end_edges:
+                chamfer(end_edges, length=p.chamfer)
 
     return builder.part
 

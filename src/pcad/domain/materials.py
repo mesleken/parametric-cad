@@ -15,6 +15,10 @@ class Material(BaseModel):
     shear_strength_mpa: float = Field(gt=0, description="Allowable or Ultimate Shear Strength in MPa")
     bearing_yield_mpa: Optional[float] = Field(default=None, description="Bearing Yield Strength in MPa")
     bearing_ult_mpa: Optional[float] = Field(default=None, description="Bearing Ultimate Strength in MPa")
+    elastic_modulus_gpa: float = Field(default=70.0, gt=0, description="Young's Modulus of Elasticity in GPa")
+    poisson_ratio: float = Field(default=0.33, gt=0, lt=0.5, description="Poisson's Ratio (dimensionless)")
+    endurance_limit_mpa: Optional[float] = Field(default=None, description="Fatigue Endurance Limit in MPa")
+    hardness_hb: Optional[float] = Field(default=None, description="Brinell Hardness HB")
     source: str = "Reference Handbook"
     typical: bool = True
 

@@ -9,6 +9,10 @@
     "shear_strength_mpa": 331.0,
     "bearing_yield_mpa": 710.0,
     "bearing_ult_mpa": 1020.0,
+    "elastic_modulus_gpa": 71.7,
+    "poisson_ratio": 0.33,
+    "endurance_limit_mpa": 159.0,
+    "hardness_hb": 150.0,
     "source": "MMPDS-01 Typical Handbook Value",
     "typical": true
   },
@@ -22,6 +26,10 @@
     "shear_strength_mpa": 207.0,
     "bearing_yield_mpa": 386.0,
     "bearing_ult_mpa": 593.0,
+    "elastic_modulus_gpa": 68.9,
+    "poisson_ratio": 0.33,
+    "endurance_limit_mpa": 96.5,
+    "hardness_hb": 95.0,
     "source": "MMPDS-01 Typical Handbook Value",
     "typical": true
   },
@@ -35,6 +43,10 @@
     "shear_strength_mpa": 550.0,
     "bearing_yield_mpa": 1250.0,
     "bearing_ult_mpa": 1600.0,
+    "elastic_modulus_gpa": 113.8,
+    "poisson_ratio": 0.342,
+    "endurance_limit_mpa": 510.0,
+    "hardness_hb": 334.0,
     "source": "MMPDS-01 Typical",
     "typical": true
   },
@@ -48,6 +60,10 @@
     "shear_strength_mpa": 490.0,
     "bearing_yield_mpa": 950.0,
     "bearing_ult_mpa": 1400.0,
+    "elastic_modulus_gpa": 205.0,
+    "poisson_ratio": 0.29,
+    "endurance_limit_mpa": 425.0,
+    "hardness_hb": 260.0,
     "source": "ASM Metals Handbook",
     "typical": true
   },
@@ -61,6 +77,10 @@
     "shear_strength_mpa": 330.0,
     "bearing_yield_mpa": 360.0,
     "bearing_ult_mpa": 800.0,
+    "elastic_modulus_gpa": 193.0,
+    "poisson_ratio": 0.28,
+    "endurance_limit_mpa": 260.0,
+    "hardness_hb": 160.0,
     "source": "EN 10088-3",
     "typical": true
   },
@@ -74,6 +94,10 @@
     "shear_strength_mpa": 70.0,
     "bearing_yield_mpa": 300.0,
     "bearing_ult_mpa": 450.0,
+    "elastic_modulus_gpa": 54.0,
+    "poisson_ratio": 0.30,
+    "endurance_limit_mpa": 250.0,
+    "hardness_hb": null,
     "source": "Typical Quasi-Isotropic [0/45/90/-45]s",
     "typical": true
   },
@@ -87,6 +111,10 @@
     "shear_strength_mpa": 25.0,
     "bearing_yield_mpa": 50.0,
     "bearing_ult_mpa": 65.0,
+    "elastic_modulus_gpa": 3.5,
+    "poisson_ratio": 0.36,
+    "endurance_limit_mpa": 20.0,
+    "hardness_hb": null,
     "source": "Filament Manufacturer Typical",
     "typical": true
   },
@@ -100,6 +128,10 @@
     "shear_strength_mpa": 28.0,
     "bearing_yield_mpa": 55.0,
     "bearing_ult_mpa": 70.0,
+    "elastic_modulus_gpa": 2.1,
+    "poisson_ratio": 0.38,
+    "endurance_limit_mpa": 18.0,
+    "hardness_hb": null,
     "source": "Filament Manufacturer Typical",
     "typical": true
   }

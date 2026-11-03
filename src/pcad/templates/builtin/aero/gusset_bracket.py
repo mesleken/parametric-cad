@@ -82,6 +82,7 @@ def build(p: BracketParams):
     return builder.part
 
 def checks(p: BracketParams, material: Material, physics: PhysicsResult) -> List[CheckResult]:
+    rib_depth = max(p.length_base * 0.65 - p.thickness, 5.0) if p.gusset_count > 0 else 0.0
     return check_bracket(
         length_mm=p.length_upright,
         width_mm=p.width,
@@ -91,7 +92,8 @@ def checks(p: BracketParams, material: Material, physics: PhysicsResult) -> List
         material=material,
         gusset_count=p.gusset_count,
         gusset_thickness_mm=p.gusset_thickness,
-        fos=p.fos
+        fos=p.fos,
+        gusset_depth_mm=rib_depth
     )
 
 build.checks_func = checks

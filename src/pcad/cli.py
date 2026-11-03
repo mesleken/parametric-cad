@@ -49,7 +49,8 @@ def run_selftest() -> int:
             solid = validate_solid(raw_part)
             print(f"  ✓ Valid solid generated (Vol={solid.volume:.1f} mm³)")
             
-            # 3. Physics
+            # 3. Physics & Material
+            mat = mat_db.get(tpl.default_material) if tpl.default_material else mat_db.get("Al7075-T6")
             phys = compute_physics(solid, mat)
             print(f"  ✓ Physics calculated: Mass={phys.mass_g:.1f} g, CoG={phys.cog_mm}")
             

@@ -1,12 +1,13 @@
 """Physical properties calculator (Volume, mass, CoG, bounding box, inertia)."""
 
 from typing import Tuple
+import numpy as np
 from build123d import Compound, Solid
 from pcad.domain.materials import Material
 from pcad.domain.template import PhysicsResult
 
 def compute_physics(solid: Solid, material: Material) -> PhysicsResult:
-    """Computes exact volume, mass, center of gravity, bbox, and moments of inertia."""
+    """Computes exact volume, mass, center of gravity, bbox, moments of inertia, and principal axes."""
     vol_mm3 = float(solid.volume)
     area_mm2 = float(solid.area)
     
@@ -41,10 +42,18 @@ def compute_physics(solid: Solid, material: Material) -> PhysicsResult:
             iyy = float(raw_mat[1][1]) * density_g_mm3
             izz = float(raw_mat[2][2]) * density_g_mm3
             inertia_tuple = (ixx, iyy, izz)
+            
+            # Principal moments of inertia (eigenvalues of symmetric 3x3 inertia tensor)
+            tensor_3x3 = np.array(raw_mat, dtype=float) * density_g_mm3
+            eigvals = np.linalg.eigvalsh(tensor_3x3)
+            eigvals.sort()
+            principal_tuple = (float(eigvals[0]), float(eigvals[1]), float(eigvals[2]))
         else:
             inertia_tuple = (0.0, 0.0, 0.0)
+            principal_tuple = (0.0, 0.0, 0.0)
     except Exception:
         inertia_tuple = (0.0, 0.0, 0.0)
+        principal_tuple = (0.0, 0.0, 0.0)
         
     return PhysicsResult(
         volume_mm3=round(vol_mm3, 2),
@@ -52,5 +61,6 @@ def compute_physics(solid: Solid, material: Material) -> PhysicsResult:
         surface_area_mm2=round(area_mm2, 2),
         cog_mm=(round(cog_mm[0], 2), round(cog_mm[1], 2), round(cog_mm[2], 2)),
         bbox_mm=tuple(round(b, 2) for b in bbox_mm),
-        inertia_g_mm2=(round(inertia_tuple[0], 1), round(inertia_tuple[1], 1), round(inertia_tuple[2], 1))
+        inertia_g_mm2=(round(inertia_tuple[0], 1), round(inertia_tuple[1], 1), round(inertia_tuple[2], 1)),
+        principal_inertia_g_mm2=(round(principal_tuple[0], 1), round(principal_tuple[1], 1), round(principal_tuple[2], 1))
     )

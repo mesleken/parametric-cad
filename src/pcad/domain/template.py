@@ -30,6 +30,7 @@ class PhysicsResult(BaseModel):
     cog_mm: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     bbox_mm: Tuple[float, float, float, float, float, float] = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0) # xmin, ymin, zmin, xmax, ymax, zmax
     inertia_g_mm2: Tuple[float, float, float] = (0.0, 0.0, 0.0) # Ixx, Iyy, Izz
+    principal_inertia_g_mm2: Tuple[float, float, float] = (0.0, 0.0, 0.0) # I1, I2, I3 (eigenvalues of inertia tensor)
 
 @dataclass
 class UI:

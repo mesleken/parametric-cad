@@ -16,6 +16,9 @@ class FlangeParams(BaseModel):
     num_bolts: Annotated[int, Field(ge=3, le=48), UI(label={"en": "Number of Bolts", "tr": "Cıvata Sayısı"}, unit="-", group="geometry", step=1.0)] = 4
     bolt_hole_dia: Annotated[float, Field(gt=2.0, le=60.0), UI(label={"en": "Bolt Hole Dia (d)", "tr": "Cıvata Delik Çapı (d)"}, unit="mm", group="geometry", step=1.0)] = 12.0
     fillet_radius: Annotated[float, Field(ge=0.0, le=30.0), UI(label={"en": "Fillet Radius (R)", "tr": "Pah / Radyus (R)"}, unit="mm", group="geometry", step=0.5)] = 4.0
+    raised_face_height: Annotated[float, Field(ge=0.0, le=10.0), UI(label={"en": "Raised Face (RF)", "tr": "Conta Kademesi (RF)"}, unit="mm", group="geometry", step=0.5)] = 0.0
+    neck_taper_ratio: Annotated[float, Field(ge=0.5, le=1.0), UI(label={"en": "Neck Taper Ratio", "tr": "Boyun Koniklik Oranı"}, unit="-", group="geometry", step=0.05)] = 1.0
+    design_pressure_mpa: Annotated[float, Field(ge=0.1, le=50.0), UI(label={"en": "Design Pressure", "tr": "Tasarım Basıncı"}, unit="MPa", group="loads", step=0.5)] = 1.6
 
     @model_validator(mode="after")
     def validate_proportions(self):
@@ -41,27 +44,39 @@ class FlangeParams(BaseModel):
 )
 def build(p: FlangeParams):
     from build123d import (
-        BuildPart, Cylinder, Circle, Locations, PolarLocations, Mode, fillet, Axis
+        BuildPart, Cylinder, Cone, Locations, PolarLocations, Mode, Align
     )
     
     with BuildPart() as builder:
         # 1. Main flange disk
         Cylinder(radius=p.outer_dia / 2.0, height=p.flange_thickness)
         
-        # 2. Hub / neck transition if height > 0
+        # 2. Raised face at bottom if specified (EN 1092-1 / ASME B16.5)
+        rf_h = p.raised_face_height
+        if rf_h > 0.0:
+            rf_dia = max(p.inner_dia + 10.0, min(p.pcd - p.bolt_hole_dia - 4.0, p.outer_dia * 0.65))
+            with Locations((0, 0, -(p.flange_thickness / 2.0) - (rf_h / 2.0))):
+                Cylinder(radius=rf_dia / 2.0, height=rf_h)
+        
+        # 3. Hub / neck transition (straight or tapered weld-neck)
         if p.neck_height > 0 and p.neck_outer_dia > p.inner_dia:
-            with Locations((0, 0, p.flange_thickness / 2.0 + p.neck_height / 2.0)):
-                Cylinder(radius=p.neck_outer_dia / 2.0, height=p.neck_height)
+            neck_z_center = p.flange_thickness / 2.0 + p.neck_height / 2.0
+            with Locations((0, 0, neck_z_center)):
+                if p.neck_taper_ratio < 0.999:
+                    top_r = max((p.neck_outer_dia / 2.0) * p.neck_taper_ratio, (p.inner_dia / 2.0) + 3.0)
+                    Cone(bottom_radius=p.neck_outer_dia / 2.0, top_radius=top_r, height=p.neck_height)
+                else:
+                    Cylinder(radius=p.neck_outer_dia / 2.0, height=p.neck_height)
                 
-        # 3. Central bore through entire part (from bottom of disk to top of neck)
-        total_h = p.flange_thickness + p.neck_height + 20.0
-        bore_z_mid = p.neck_height / 2.0
+        # 4. Central bore through entire part (from bottom of disk/RF to top of neck)
+        total_h = p.flange_thickness + p.neck_height + rf_h + 20.0
+        bore_z_mid = (p.neck_height - rf_h) / 2.0
         with Locations((0, 0, bore_z_mid)):
             Cylinder(radius=p.inner_dia / 2.0, height=total_h, mode=Mode.SUBTRACT)
             
-        # 4. Bolt hole pattern
+        # 5. Bolt hole pattern
         with PolarLocations(radius=p.pcd / 2.0, count=p.num_bolts):
-            Cylinder(radius=p.bolt_hole_dia / 2.0, height=p.flange_thickness * 2.0, mode=Mode.SUBTRACT)
+            Cylinder(radius=p.bolt_hole_dia / 2.0, height=p.flange_thickness * 2.0 + rf_h * 2.0, mode=Mode.SUBTRACT)
             
     return builder.part
 
@@ -73,6 +88,9 @@ def checks(p: FlangeParams, material: Material, physics: PhysicsResult) -> List[
         num_bolts=p.num_bolts,
         bolt_hole_dia=p.bolt_hole_dia,
         flange_thickness=p.flange_thickness,
+        neck_outer_dia=p.neck_outer_dia,
+        neck_height=p.neck_height,
+        design_pressure_mpa=p.design_pressure_mpa,
         material=material
     )
 

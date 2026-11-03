@@ -108,7 +108,25 @@ def checks(p: SplicePlateParams, material: Material, physics: PhysicsResult) -> 
         message="Average bearing stress across fastener contact surfaces"
     ))
     
-    # 3. Aerospace Fastener Spacing Rules
+    # 3. Fastener Shear Stress with Row Load Concentration (Bruhn D2 / Niu Ch 7)
+    # Differential strain in multi-row lap joints causes outer fastener row to carry ~15% higher load
+    row_concentration_factor = 1.15 if p.cols_per_side > 1 else 1.0
+    critical_bolt_load_n = load_per_bolt * row_concentration_factor
+    a_bolt_shear = (3.14159265 / 4.0) * (p.bolt_dia ** 2)
+    tau_bolt = critical_bolt_load_n / max(a_bolt_shear, 1e-4)
+    # High-strength shear allowable (NAS bolt or matched 0.60 * Ftu)
+    tau_allowable = 0.60 * material.ultimate_strength_mpa
+    results.append(make_check_result(
+        name="Fastener Shear Stress",
+        applied=tau_bolt,
+        allowable=tau_allowable,
+        fos=p.fos,
+        unit="MPa",
+        rule_ref="Bruhn D2.1 / Niu Ch. 7",
+        message=f"Outer row fastener single shear (eta={row_concentration_factor:.2f}, load={critical_bolt_load_n:.0f} N)."
+    ))
+
+    # 4. Aerospace Fastener Spacing Rules
     # Edge distance ratio e / d >= 2.0
     ed_ratio = p.edge_x / p.bolt_dia
     results.append(CheckResult(

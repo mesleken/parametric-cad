@@ -40,11 +40,15 @@ def test_splice_plate_geometry_and_checks():
     assert phys.mass_g > 0.0
     
     res = checks(p, mat, phys)
-    assert len(res) == 4
+    assert len(res) == 5
     
     net_chk = next(c for c in res if c.name == "Net-Section Tension")
     assert net_chk.status == MarginStatus.POSITIVE
     assert net_chk.applied > 0.0
+    
+    shear_chk = next(c for c in res if "Fastener Shear Stress" in c.name)
+    assert shear_chk.status == MarginStatus.POSITIVE
+    assert shear_chk.applied > 0.0
     
     ed_chk = next(c for c in res if "Edge Distance" in c.name)
     assert ed_chk.applied == 2.5 # 20 / 8 = 2.5 >= 2.0
